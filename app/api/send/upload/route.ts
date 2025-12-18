@@ -1,5 +1,5 @@
 import { jsonWithServer } from '@/lib/api';
-import { getClerkIdentityKey } from '@/lib/clerkIdentity';
+import { getClerkIdentityKeys } from '@/lib/clerkIdentity';
 import {
   FILE_CLEANUP_INDEX_CSTORE_HKEY,
   RECEIVED_FILES_CSTORE_HKEY,
@@ -207,8 +207,10 @@ export async function POST(request: Request) {
     const isWalletInitiator = initiatorIdentity.kind === 'wallet';
 
     if (isEmailInitiator) {
-      const clerkIdentity = await getClerkIdentityKey();
-      if (!clerkIdentity || clerkIdentity.value !== initiatorIdentity.value) {
+      const clerkKeys = await getClerkIdentityKeys();
+      console.log(clerkKeys);
+      const matches = clerkKeys.some((key) => key.value === initiatorIdentity.value);
+      if (!matches) {
         return fail('Unauthorized initiator identity', 403);
       }
     }
