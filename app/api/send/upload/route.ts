@@ -1,4 +1,5 @@
 import { jsonWithServer } from '@/lib/api';
+import { getClerkIdentityKey } from '@/lib/clerkIdentity';
 import {
   FILE_CLEANUP_INDEX_CSTORE_HKEY,
   RECEIVED_FILES_CSTORE_HKEY,
@@ -12,6 +13,7 @@ import {
   computeEncryptionMetadataDigest,
   parseSendHandshakeMessage,
 } from '@/lib/handshake';
+import { parseIdentityKey } from '@/lib/identityKey';
 import { Manager3sendAbi } from '@/lib/SmartContracts';
 import { PLATFORM_STATS_CACHE_TAG, updateStatsAfterUpload } from '@/lib/stats';
 import { createStepTimers } from '@/lib/timers';
@@ -20,14 +22,7 @@ import createEdgeSdk from '@ratio1/edge-sdk-ts';
 import Busboy from 'busboy';
 import { revalidateTag } from 'next/cache';
 import { PassThrough, Readable } from 'node:stream';
-import {
-  createPublicClient,
-  decodeEventLog,
-  http,
-  isAddress,
-  isErc6492Signature,
-  verifyMessage,
-} from 'viem';
+import { createPublicClient, decodeEventLog, http, isErc6492Signature, verifyMessage } from 'viem';
 import { base, baseSepolia, type Chain } from 'viem/chains';
 
 function getRpcUrl(chainId: number): { chain: Chain; rpcUrl: string } | null {
@@ -190,34 +185,45 @@ export async function POST(request: Request) {
       return fail('Missing recipient', 400);
     }
 
-    const recipientAddress = recipient.trim();
-    if (!isAddress(recipientAddress)) {
-      return fail('Invalid recipient address', 400);
-    }
-
     if (typeof initiator !== 'string' || initiator.trim().length === 0) {
       return fail('Missing initiator', 400);
     }
 
-    const initiatorAddress = initiator.trim();
-    if (!isAddress(initiatorAddress)) {
-      return fail('Invalid initiator address', 400);
+    const recipientIdentity = parseIdentityKey(recipient);
+    if (!recipientIdentity) {
+      return fail('Invalid recipient identity', 400);
+    }
+
+    const initiatorIdentity = parseIdentityKey(initiator);
+    if (!initiatorIdentity) {
+      return fail('Invalid initiator identity', 400);
     }
 
     if (typeof handshakeMessageRaw !== 'string' || handshakeMessageRaw.trim().length === 0) {
       return fail('Missing handshakeMessage', 400);
     }
 
-    if (typeof signatureRaw !== 'string' || signatureRaw.trim().length === 0) {
-      return fail('Missing signature', 400);
+    const isEmailInitiator = initiatorIdentity.kind === 'email';
+    const isWalletInitiator = initiatorIdentity.kind === 'wallet';
+
+    if (isEmailInitiator) {
+      const clerkIdentity = await getClerkIdentityKey();
+      if (!clerkIdentity || clerkIdentity.value !== initiatorIdentity.value) {
+        return fail('Unauthorized initiator identity', 403);
+      }
     }
 
-    if (!signatureRaw.trim().startsWith('0x')) {
-      return fail('Invalid signature format', 400);
+    if (isWalletInitiator) {
+      if (typeof signatureRaw !== 'string' || signatureRaw.trim().length === 0) {
+        return fail('Missing signature', 400);
+      }
+      if (!signatureRaw.trim().startsWith('0x')) {
+        return fail('Invalid signature format', 400);
+      }
     }
 
     if (typeof paymentTxHashRaw !== 'string' || paymentTxHashRaw.trim().length === 0) {
-      return fail('Missing paymentTxHash', 400);
+      return fail('Missing payment reference', 400);
     }
     const paymentTxHashProvided = paymentTxHashRaw.trim().toLowerCase();
 
@@ -225,11 +231,14 @@ export async function POST(request: Request) {
     if (handshakeMessage.length === 0) {
       return fail('Missing handshakeMessage', 400);
     }
-    const signature = signatureRaw.trim() as `0x${string}`;
+    const signature = signatureRaw?.toString().trim() as `0x${string}`;
     const paymentTxHash = paymentTxHashProvided;
 
-    const chainId = typeof chainIdRaw === 'string' ? Number(chainIdRaw) : Number(chainIdRaw ?? NaN);
-    if (!Number.isInteger(chainId) || chainId <= 0) {
+    const chainIdCandidate =
+      typeof chainIdRaw === 'string' ? Number(chainIdRaw) : Number(chainIdRaw ?? NaN);
+    const chainId =
+      Number.isInteger(chainIdCandidate) && chainIdCandidate > 0 ? chainIdCandidate : 0;
+    if (isWalletInitiator && chainId <= 0) {
       return fail('Missing chainId', 400);
     }
 
@@ -315,8 +324,13 @@ export async function POST(request: Request) {
         ? originalMimeTypeRaw
         : undefined;
 
-    const recipientKey = recipientAddress.toLowerCase();
-    const initiatorAddr = initiatorAddress.toLowerCase();
+    const recipientValue = recipientIdentity.value;
+    const initiatorValue = initiatorIdentity.value;
+    const recipientStorageKey = recipientIdentity.storageKey;
+    const initiatorStorageKey = initiatorIdentity.storageKey;
+    const recipientSecret = recipientValue.toLowerCase();
+    const initiatorSecret = initiatorValue.toLowerCase();
+    const initiatorWalletAddress = isWalletInitiator ? initiatorValue : null;
 
     const preliminarySentAt =
       typeof sentAtRaw === 'string'
@@ -353,10 +367,10 @@ export async function POST(request: Request) {
       return fail('Missing ciphertext size', 400);
     }
 
-    if (parsedHandshake.sender !== initiatorAddr) {
+    if (parsedHandshake.sender !== initiatorSecret) {
       return fail('Handshake sender mismatch', 400);
     }
-    if (parsedHandshake.recipient !== recipientKey) {
+    if (parsedHandshake.recipient !== recipientSecret) {
       return fail('Handshake recipient mismatch', 400);
     }
     if (parsedHandshake.chainId !== chainId) {
@@ -386,8 +400,8 @@ export async function POST(request: Request) {
     sentTimestamp = parsedHandshake.sentAtMs;
 
     const expectedHandshakeMessage = buildSendHandshakeMessage({
-      initiator: initiatorAddr,
-      recipient: recipientKey,
+      initiator: initiatorSecret,
+      recipient: recipientSecret,
       chainId,
       paymentTxHash,
       sentAt: sentTimestamp,
@@ -412,6 +426,10 @@ export async function POST(request: Request) {
         : undefined;
     const isFreePayment = isFreePaymentReference(paymentTxHash);
 
+    if (isEmailInitiator && !isFreePayment) {
+      return fail('Email logins can only use free micro-sends.', 400);
+    }
+
     if (!isFreePayment && normalizedPaymentType === 'FREE') {
       return fail('Payment type mismatch for paid transfer', 400);
     }
@@ -424,46 +442,52 @@ export async function POST(request: Request) {
       return fail('Invalid paymentTxHash for paid transfer', 400);
     }
 
-    if (isFreePayment) {
+    if (isFreePayment || isEmailInitiator) {
       paymentAsset = 'FREE';
     }
 
-    const rpcDetails = getRpcUrl(chainId);
-    if (!rpcDetails) {
-      return fail('Unsupported chain', 400);
-    }
-
-    const { chain, rpcUrl } = rpcDetails;
-    const client = createPublicClient({ chain, transport: http(rpcUrl) });
-
     endInitialVerification();
+    let client: ReturnType<typeof createPublicClient> | null = null;
 
-    const endSignatureVerification = timers.start('signatureVerification');
-    let signatureVerified = false;
-    try {
-      signatureVerified = await client.verifyMessage({
-        address: initiatorAddress as `0x${string}`,
-        message: handshakeMessage,
-        signature,
-      });
-    } catch (err) {
-      console.warn('[upload] Failed smart wallet verification, falling back to EOA', err);
-      signatureVerified = await verifyMessage({
-        address: initiatorAddress as `0x${string}`,
-        message: handshakeMessage,
-        signature,
-      });
-    }
-    endSignatureVerification();
+    if (isWalletInitiator) {
+      const rpcDetails = getRpcUrl(chainId);
+      if (!rpcDetails) {
+        return fail('Unsupported chain', 400);
+      }
 
-    if (!signatureVerified) {
-      return fail('Handshake signature mismatch', 400);
+      const { chain, rpcUrl } = rpcDetails;
+      client = createPublicClient({ chain, transport: http(rpcUrl) });
+
+      const endSignatureVerification = timers.start('signatureVerification');
+      let signatureVerified = false;
+      try {
+        signatureVerified = await client.verifyMessage({
+          address: initiatorWalletAddress as `0x${string}`,
+          message: handshakeMessage,
+          signature,
+        });
+      } catch (err) {
+        console.warn('[upload] Failed smart wallet verification, falling back to EOA', err);
+        signatureVerified = await verifyMessage({
+          address: initiatorWalletAddress as `0x${string}`,
+          message: handshakeMessage,
+          signature,
+        });
+      }
+      endSignatureVerification();
+
+      if (!signatureVerified) {
+        return fail('Handshake signature mismatch', 400);
+      }
     }
 
     let eventUsdcAmount = 0n;
     let eventR1Amount = 0n;
 
     if (!isFreePayment) {
+      if (!client) {
+        throw new Error('Missing blockchain client for paid transfer');
+      }
       const endPaymentOnchainCheck = timers.start('paymentOnchainCheck');
       let receipt;
       try {
@@ -481,7 +505,7 @@ export async function POST(request: Request) {
         typedSignature.length > 132 || isErc6492Signature(typedSignature);
       if (!maybeSmartWalletSignature) {
         const receiptInitiator = receipt.from?.toLowerCase();
-        if (!receiptInitiator || receiptInitiator !== initiatorAddr) {
+        if (!receiptInitiator || receiptInitiator !== initiatorSecret) {
           throw new Error('Payment transaction initiator does not match sender');
         }
       }
@@ -510,7 +534,7 @@ export async function POST(request: Request) {
       }
 
       const logSender = String(paymentLog.args.sender ?? '').toLowerCase();
-      if (logSender !== initiatorAddr) {
+      if (logSender !== initiatorSecret) {
         throw new Error('Payment sender does not match initiator');
       }
 
@@ -542,7 +566,7 @@ export async function POST(request: Request) {
     if (isFreePayment) {
       try {
         const endFreeSendReservation = timers.start('freeSendReservation');
-        const { timings } = await consumeFreeSend(initiatorAddr, sentTimestamp, ratio1);
+        const { timings } = await consumeFreeSend(initiatorStorageKey, sentTimestamp, ratio1);
         endFreeSendReservation();
         timers.timings = { ...timers.timings, ...timings };
       } catch (err) {
@@ -570,7 +594,7 @@ export async function POST(request: Request) {
       file: passThrough,
       filename: uploadFilename,
       contentType: uploadContentType,
-      secret: recipientKey,
+      secret: recipientSecret,
     });
     file.stream.pipe(passThrough);
     file.stream.resume();
@@ -608,8 +632,8 @@ export async function POST(request: Request) {
     const record: StoredUploadRecord = {
       cid,
       filename: originalFilename ?? uploadFilename,
-      recipient: recipientKey,
-      initiator: initiatorAddr,
+      recipient: recipientValue,
+      initiator: initiatorValue,
       note: hasEncryptedNote ? undefined : noteValue,
       txHash: paymentTxHash,
       filesize: effectiveFileSize,
@@ -634,7 +658,7 @@ export async function POST(request: Request) {
         const endCstoreWriteReceived = timers.start('cstoreWriteReceived');
         console.log(`[upload] cstoreWriteReceived started at ${Date.now()}`);
         await ratio1.cstore.hset({
-          hkey: `${RECEIVED_FILES_CSTORE_HKEY}_${recipientKey}`,
+          hkey: `${RECEIVED_FILES_CSTORE_HKEY}_${recipientStorageKey}`,
           key: paymentTxHash,
           value: recordJson,
         });
@@ -645,7 +669,7 @@ export async function POST(request: Request) {
         const endCstoreWriteSent = timers.start('cstoreWriteSent');
         console.log(`[upload] cstoreWriteSent started at ${Date.now()}`);
         await ratio1.cstore.hset({
-          hkey: `${SENT_FILES_CSTORE_HKEY}_${initiatorAddr}`,
+          hkey: `${SENT_FILES_CSTORE_HKEY}_${initiatorStorageKey}`,
           key: paymentTxHash,
           value: recordJson,
         });
@@ -670,8 +694,8 @@ export async function POST(request: Request) {
     try {
       const { timings } = await updateStatsAfterUpload({
         ratio1,
-        sender: initiatorAddr,
-        recipient: recipientKey,
+        sender: initiatorValue,
+        recipient: recipientValue,
         filesize: effectiveFileSize,
         r1Burn: eventR1Amount,
       });
@@ -686,8 +710,8 @@ export async function POST(request: Request) {
     const cleanupIndexEntry: FileCleanupIndexEntry = {
       txHash: paymentTxHash,
       cid,
-      recipient: recipientKey,
-      initiator: initiatorAddr,
+      recipient: recipientValue,
+      initiator: initiatorValue,
       sentAt: sentTimestamp,
     };
     const endCleanupIndexWrite = timers.start('cleanupIndexWrite');
@@ -700,7 +724,7 @@ export async function POST(request: Request) {
 
     return jsonWithServer({
       success: true,
-      recordKey: recipientKey,
+      recordKey: recipientStorageKey,
       record,
       timings: timers.timings,
     });
