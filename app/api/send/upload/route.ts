@@ -630,7 +630,7 @@ export async function POST(request: Request) {
 
     const endCstoreWrites = timers.start('cstoreWrites');
     await Promise.all([
-      async () => {
+      (async () => {
         const endCstoreWriteReceived = timers.start('cstoreWriteReceived');
         console.log(`[upload] cstoreWriteReceived started at ${Date.now()}`);
         await ratio1.cstore.hset({
@@ -640,8 +640,8 @@ export async function POST(request: Request) {
         });
         console.log(`[upload] cstoreWriteReceived completed at ${Date.now()}`);
         endCstoreWriteReceived();
-      },
-      async () => {
+      })(),
+      (async () => {
         const endCstoreWriteSent = timers.start('cstoreWriteSent');
         console.log(`[upload] cstoreWriteSent started at ${Date.now()}`);
         await ratio1.cstore.hset({
@@ -651,8 +651,8 @@ export async function POST(request: Request) {
         });
         console.log(`[upload] cstoreWriteSent completed at ${Date.now()}`);
         endCstoreWriteSent();
-      },
-      async () => {
+      })(),
+      (async () => {
         const endCstoreWritePaymentUsed = timers.start('cstoreWritePaymentUsed');
         console.log(`[upload] cstoreWritePaymentUsed started at ${Date.now()}`);
         await ratio1.cstore.hset({
@@ -662,7 +662,7 @@ export async function POST(request: Request) {
         });
         console.log(`[upload] cstoreWritePaymentUsed completed at ${Date.now()}`);
         endCstoreWritePaymentUsed();
-      },
+      })(),
     ]);
     endCstoreWrites();
 
