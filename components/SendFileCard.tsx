@@ -1464,37 +1464,6 @@ export function SendFileCard() {
               {buttonContent}
             </button>
           </div>
-          {uploadProgress !== null && (
-            <div className="col" style={{ gap: 6 }}>
-              <div className="row" style={{ justifyContent: 'space-between', fontSize: 12 }}>
-                <span className="muted">Uploading…</span>
-                <span className="muted mono">{uploadProgress}%</span>
-              </div>
-              <div
-                role="progressbar"
-                aria-label="Upload progress"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={uploadProgress}
-                style={{
-                  width: '100%',
-                  height: 6,
-                  borderRadius: 999,
-                  background: 'rgba(148, 163, 184, 0.35)',
-                  overflow: 'hidden',
-                }}
-              >
-                <div
-                  style={{
-                    width: `${uploadProgress}%`,
-                    height: '100%',
-                    background: 'var(--accent)',
-                    transition: 'width 150ms ease',
-                  }}
-                />
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>
