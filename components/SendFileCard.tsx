@@ -1297,7 +1297,7 @@ export function SendFileCard() {
                   fontSize: 12,
                 }}
               >
-                Email logins are limited to free micro-sends (≤50 MB). Reduce the file size to
+                Email logins are currently limited to free micro-sends (≤50 MB). Reduce the file size to
                 continue.
               </div>
             )}
