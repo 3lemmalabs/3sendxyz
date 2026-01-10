@@ -16,12 +16,12 @@ export default function PricingCta() {
         <div>
           <div style={{ fontWeight: 700 }}>Ready to send?</div>
           <div className="muted" style={{ fontSize: 12 }}>
-            Go to Outbox and start sending. Pricing updates automatically based on your file size.
+            Go to send page and start sending. Pricing updates automatically based on your file size.
           </div>
         </div>
         <div className="homeCtaActions">
           <Link href="/outbox" className="button" style={{ textDecoration: 'none' }}>
-            Go to Outbox
+            Send
           </Link>
         </div>
       </div>
