@@ -77,3 +77,17 @@ The Ratio1 SDK also accepts the above variables via `window.__RATIO1_ENV__` when
 - Protocol deep-dive lives at `/docs` (rendered from `app/docs/page.tsx`).
 - Pricing tiers are defined in `lib/constants.ts` and rendered in `/pricing`.
 - Smart contract source of truth: https://github.com/aledefra/3sendxyz-sc (ABI mirror in `lib/SmartContracts.ts`).
+
+## Citation
+
+```bibtex
+@software{butusina2025_3sendxyz,
+  author       = {Butusina, Petrica and Defranceschi, Alessandro},
+  title        = {{3sendxyz}: End-to-end encrypted, decentralized file transfer},
+  year         = {2025},
+  url          = {https://github.com/3lemmalabs/3sendxyz},
+  organization = {3lemma Labs},
+  note         = {Software library}
+}
+```
+
