@@ -84,7 +84,15 @@ export function Navbar() {
         <div className="navbarWallet" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <SignedIn>
             <div className="navbarClerk">
-              <UserButton />
+              <UserButton
+                userProfileProps={{
+                  appearance: {
+                    elements: {
+                      profileSectionPrimaryButton__emailAddresses: { display: 'none' },
+                    },
+                  },
+                }}
+              />
             </div>
           </SignedIn>
           <MinimalConnect />
