@@ -471,7 +471,6 @@ export function SendFileCard() {
     isWalletLogin,
     isConnected,
     isOnSupportedChain,
-    MANAGER_CONTRACT_ADDRESS,
     quoteLoading,
     quoteData,
     balancesLoading,
