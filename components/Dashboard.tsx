@@ -110,11 +110,17 @@ export default function Dashboard({ initialPlatformStats }: DashboardProps) {
         const payload = await res.json().catch(() => null);
         if (!aborted) {
           if (res.ok && payload?.success) {
+            const identityStats =
+              payload.identity && typeof payload.identity === 'object'
+                ? payload.identity
+                : payload.address && typeof payload.address === 'object'
+                  ? payload.address
+                  : null;
             const nextStats =
-              payload.address && typeof payload.address === 'object'
+              identityStats
                 ? {
-                    ...payload.address,
-                    address: (payload.address.address ?? normalized).toLowerCase(),
+                    ...identityStats,
+                    address: (identityStats.address ?? normalized).toLowerCase(),
                   }
                 : createEmptyAddressStats(normalized);
             setUserStats(nextStats as AddressStatsRecord);
