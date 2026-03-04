@@ -208,7 +208,6 @@ export async function POST(request: Request) {
 
     if (isEmailInitiator) {
       const clerkKeys = await getClerkIdentityKeys();
-      console.log(clerkKeys);
       const matches = clerkKeys.some((key) => key.value === initiatorIdentity.value);
       if (!matches) {
         return fail('Unauthorized initiator identity', 403);

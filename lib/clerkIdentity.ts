@@ -14,7 +14,8 @@ export async function getClerkIdentityKeys() {
 
   let userEmails: string[] = [];
   try {
-    const user = await (await clerkClient()).users.getUser(userId);
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
     userEmails = [
       user.primaryEmailAddress?.emailAddress,
       ...user.emailAddresses.map((entry) => entry.emailAddress),

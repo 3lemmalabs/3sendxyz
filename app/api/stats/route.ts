@@ -1,18 +1,24 @@
 import { fetchAddressStats, fetchPlatformStats } from '@/lib/stats';
 import createEdgeSdk from '@ratio1/edge-sdk-ts';
 import { jsonWithServer } from '@/lib/api';
+import { parseIdentityKey } from '@/lib/identityKey';
 
 export const runtime = 'nodejs';
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const identity = url.searchParams.get('identity') ?? url.searchParams.get('address');
+  const parsedIdentity = identity ? parseIdentityKey(identity) : null;
+
+  if (identity && !parsedIdentity) {
+    return jsonWithServer({ success: false, error: 'Invalid identity' }, { status: 400 });
+  }
 
   try {
     const ratio1 = createEdgeSdk();
     const [totals, addressStats] = await Promise.all([
       fetchPlatformStats(ratio1),
-      identity ? fetchAddressStats(identity, ratio1) : Promise.resolve(null),
+      parsedIdentity ? fetchAddressStats(parsedIdentity.storageKey, ratio1) : Promise.resolve(null),
     ]);
 
     return jsonWithServer({
