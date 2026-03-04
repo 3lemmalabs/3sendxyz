@@ -137,9 +137,6 @@ export function LoginModal({ open, onClose }: LoginModalProps) {
           </ConnectButton.Custom>
         </div>
 
-        <div className="authModalFooter">
-          You can add a wallet later. We will never ask for your seed phrase.
-        </div>
       </div>
     </div>
   );

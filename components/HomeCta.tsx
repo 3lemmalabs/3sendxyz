@@ -230,7 +230,7 @@ export default function HomeCta() {
                   fontSize: 'inherit',
                 }}
               >
-                <span className="mono" style={{ fontSize: 12, color: 'var(--accent)' }}>
+                <span style={{ fontWeight: 600, lineHeight: 1 }}>
                   {identityValue}
                 </span>
               </button>
