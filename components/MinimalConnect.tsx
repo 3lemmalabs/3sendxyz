@@ -1,12 +1,20 @@
 'use client';
 
 import { IdentityBadge } from '@/components/IdentityBadge';
+import { LoginButton } from '@/components/LoginButton';
+import { useAuthStatus } from '@/lib/useAuthStatus';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 
 export function MinimalConnect() {
+  const { authMethod } = useAuthStatus();
+
+  if (authMethod === 'clerk') {
+    return null;
+  }
+
   return (
     <ConnectButton.Custom>
-      {({ account, chain, openAccountModal, openChainModal, openConnectModal, mounted }) => {
+      {({ account, chain, openAccountModal, openChainModal, mounted }) => {
         const connected = mounted && account && chain;
 
         return (
@@ -22,11 +30,10 @@ export function MinimalConnect() {
           >
             {(() => {
               if (!connected) {
-                return (
-                  <button onClick={openConnectModal} className="button" type="button">
-                    Connect Wallet
-                  </button>
-                );
+                if (authMethod === 'mixed') {
+                  return null;
+                }
+                return <LoginButton />;
               }
 
               if (chain.unsupported) {

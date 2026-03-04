@@ -2,10 +2,10 @@
 
 import { formatBytes } from '@/lib/format';
 import type { AddressStatsRecord, PlatformStatsRecord } from '@/lib/types';
+import { useAuthStatus } from '@/lib/useAuthStatus';
 import { useEffect, useMemo, useState } from 'react';
 // Removed full-card loader in favor of per-card skeletons
 import { formatUnits } from 'viem';
-import { useAccount } from 'wagmi';
 
 const BYTES_IN_GB = 1024 * 1024 * 1024;
 
@@ -61,13 +61,14 @@ type DashboardProps = {
 };
 
 export default function Dashboard({ initialPlatformStats }: DashboardProps) {
+  const { isLoggedIn, identityValue, authMethod } = useAuthStatus();
   const [platformStats, setPlatformStats] = useState<PlatformStatsRecord>(() =>
     initialPlatformStats ? { ...initialPlatformStats } : createEmptyPlatformStats()
   );
   const [userStats, setUserStats] = useState<AddressStatsRecord>(() => createEmptyAddressStats());
   const [userLoading, setUserLoading] = useState<boolean>(false);
 
-  const { address, isConnected } = useAccount();
+  const identity = identityValue ?? '';
 
   useEffect(() => {
     let aborted = false;
@@ -94,8 +95,8 @@ export default function Dashboard({ initialPlatformStats }: DashboardProps) {
   useEffect(() => {
     let aborted = false;
     async function refreshUserStats() {
-      const normalized = address?.toLowerCase() ?? '';
-      if (!isConnected || !normalized) {
+      const normalized = identity.toLowerCase();
+      if (!isLoggedIn || !normalized) {
         if (!aborted) {
           setUserStats(createEmptyAddressStats());
           setUserLoading(false);
@@ -104,16 +105,22 @@ export default function Dashboard({ initialPlatformStats }: DashboardProps) {
       }
       setUserLoading(true);
       try {
-        const params = new URLSearchParams({ address: normalized });
+        const params = new URLSearchParams({ identity: normalized });
         const res = await fetch(`/api/stats?${params.toString()}`);
         const payload = await res.json().catch(() => null);
         if (!aborted) {
           if (res.ok && payload?.success) {
+            const identityStats =
+              payload.identity && typeof payload.identity === 'object'
+                ? payload.identity
+                : payload.address && typeof payload.address === 'object'
+                  ? payload.address
+                  : null;
             const nextStats =
-              payload.address && typeof payload.address === 'object'
+              identityStats
                 ? {
-                    ...payload.address,
-                    address: (payload.address.address ?? normalized).toLowerCase(),
+                    ...identityStats,
+                    address: (identityStats.address ?? normalized).toLowerCase(),
                   }
                 : createEmptyAddressStats(normalized);
             setUserStats(nextStats as AddressStatsRecord);
@@ -139,7 +146,7 @@ export default function Dashboard({ initialPlatformStats }: DashboardProps) {
       aborted = true;
       window.removeEventListener('ratio1:upload-completed', onCompleted);
     };
-  }, [isConnected, address]);
+  }, [isLoggedIn, identity]);
 
   const totalGbSent = formatGb(platformStats.totalBytesSent);
   const platformR1 = useMemo(
@@ -182,7 +189,7 @@ export default function Dashboard({ initialPlatformStats }: DashboardProps) {
         </div>
       </div>
 
-      {isConnected && (
+      {isLoggedIn && identityValue ? (
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontWeight: 700 }}>Your Stats</div>
@@ -216,14 +223,35 @@ export default function Dashboard({ initialPlatformStats }: DashboardProps) {
             <StatCard label="R1 burned" value={`${userR1.display} R1`} loading={userLoading} />
           </div>
         </div>
-      )}
+      ) : authMethod === 'mixed' ? (
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ fontWeight: 700 }}>Your Stats</div>
+          <div className="muted" style={{ fontSize: 12 }}>
+            Multiple logins active. Sign out of one to continue.
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function StatCard({ label, value, hint, loading }: { label: string; value: string; hint?: string; loading?: boolean }) {
+function StatCard({
+  label,
+  value,
+  hint,
+  loading,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  loading?: boolean;
+}) {
   return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }} aria-busy={loading || undefined}>
+    <div
+      className="card"
+      style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
+      aria-busy={loading || undefined}
+    >
       <div className="muted" style={{ fontSize: 12 }}>
         {label}
       </div>

@@ -3,8 +3,8 @@
 import { FREE_MICRO_SENDS_PER_MONTH } from '@/lib/constants';
 import { formatDateShort } from '@/lib/format';
 import type { FreeSendAllowance } from '@/lib/types';
+import { useAuthStatus } from '@/lib/useAuthStatus';
 import { useQuery } from '@tanstack/react-query';
-import { useAccount } from 'wagmi';
 
 function formatResetDate(ts?: number) {
   if (!ts) return null;
@@ -12,17 +12,18 @@ function formatResetDate(ts?: number) {
 }
 
 export function PricingFreeAllowanceCard() {
-  const { address, isConnected } = useAccount();
+  const { authMethod, isLoggedIn, identityValue } = useAuthStatus();
+  const identity = identityValue ?? '';
 
   const { data, isLoading, isError } = useQuery<FreeSendAllowance>({
-    queryKey: ['pricing-free-allowance', address],
-    enabled: Boolean(isConnected && address),
+    queryKey: ['pricing-free-allowance', identity],
+    enabled: Boolean(isLoggedIn && identity),
     staleTime: 60_000,
     queryFn: async () => {
-      if (!address) {
-        throw new Error('Missing address');
+      if (!identity) {
+        throw new Error('Missing identity');
       }
-      const res = await fetch(`/api/send/freeAllowance?address=${encodeURIComponent(address)}`);
+      const res = await fetch(`/api/send/freeAllowance?identity=${encodeURIComponent(identity)}`);
       const payload = await res.json().catch(() => null);
       if (!res.ok || !payload?.success || !payload.allowance) {
         const msg =
@@ -52,13 +53,17 @@ export function PricingFreeAllowanceCard() {
     >
       <div style={{ fontWeight: 700, marginBottom: 6 }}>Monthly free micro-sends</div>
       <div className="muted" style={{ fontSize: 12 }}>
-        Every wallet gets {FREE_MICRO_SENDS_PER_MONTH} free Micro Sends (up to 50 MB) each month.
+        Every account gets {FREE_MICRO_SENDS_PER_MONTH} free Micro Sends (up to 50 MB) each month.
         Free credits reset at the start of every month; once you use them, Micro tier pricing
         applies automatically.
       </div>
       <div style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: '#0f172a' }}>
-        {!isConnected ? (
-          'Connect your wallet to see your remaining free sends.'
+        {!isLoggedIn ? (
+          'Log in to see your remaining free sends.'
+        ) : !identity ? (
+          authMethod === 'mixed'
+            ? 'Multiple logins active. Sign out of one to continue.'
+            : 'Select a login method to continue.'
         ) : isLoading ? (
           'Checking your free sends…'
         ) : isError || !allowance ? (

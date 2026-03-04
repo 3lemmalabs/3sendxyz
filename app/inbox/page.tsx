@@ -1,5 +1,6 @@
 'use client';
 
+import { LoginButton } from '@/components/LoginButton';
 import { TxLink } from '@/components/Links';
 import { RoundedLoaderList } from '@/components/RoundedLoader';
 import { WalletIdentityCard } from '@/components/WalletIdentityCard';
@@ -8,12 +9,13 @@ import { decodeBase64, decryptFileFromEnvelope, decryptNoteFromEnvelope } from '
 import { formatBytes, formatDate, formatDateShort, nextUtcMidnight } from '@/lib/format';
 import { deriveSeedKeyPair } from '@/lib/keys';
 import { derivePasskeyX25519KeyPair } from '@/lib/passkeyClient';
+import { useAuthStatus } from '@/lib/useAuthStatus';
 import type { RegisteredKeyRecord, RegisteredPasskeyRecord, StoredUploadRecord } from '@/lib/types';
 import { getVaultPrivateKey } from '@/lib/vaultClient';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { formatUnits } from 'viem';
-import { useAccount, useSignMessage } from 'wagmi';
+import { useSignMessage } from 'wagmi';
 import { loadProfile } from '../profile/storage';
 
 type ReceivedItem = StoredUploadRecord & { id: string };
@@ -26,7 +28,7 @@ type NoteState = {
 const makeRecordId = (record: StoredUploadRecord) => `${record.txHash}:${record.initiator}`;
 
 export default function InboxPage() {
-  const { address, isConnected } = useAccount();
+  const { authMethod, canUseWallet, isLoggedIn, identityValue } = useAuthStatus();
   const { signMessageAsync } = useSignMessage();
   const [records, setRecords] = useState<ReceivedItem[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -46,7 +48,7 @@ export default function InboxPage() {
   const passkeyLoading = registeredKeyLoading;
 
   const fetchInbox = useCallback(async () => {
-    if (!address) {
+    if (!isLoggedIn || !identityValue) {
       setRecords([]);
       setExpanded({});
       setLoading(false);
@@ -56,7 +58,7 @@ export default function InboxPage() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ recipient: address });
+      const params = new URLSearchParams({ recipient: identityValue });
       const res = await fetch(`/api/inbox?${params.toString()}`);
       const payload = await res.json().catch(() => null);
       if (!res.ok || !payload?.success) {
@@ -77,7 +79,7 @@ export default function InboxPage() {
     } finally {
       setLoading(false);
     }
-  }, [address]);
+  }, [isLoggedIn, identityValue]);
 
   useEffect(() => {
     fetchInbox();
@@ -114,7 +116,7 @@ export default function InboxPage() {
 
   const fetchPasskeyStatus = useCallback(async () => {
     seedKeyCacheRef.current = null;
-    if (!address) {
+    if (!isLoggedIn || !identityValue) {
       setRegisteredKeyRecord(null);
       setRegisteredKeyLoading(false);
       setRegisteredKeyError(null);
@@ -123,7 +125,7 @@ export default function InboxPage() {
     setRegisteredKeyLoading(true);
     setRegisteredKeyError(null);
     try {
-      const params = new URLSearchParams({ address });
+      const params = new URLSearchParams({ identity: identityValue });
       const res = await fetch(`/api/keys/status?${params.toString()}`);
       const payload = await res.json().catch(() => null);
       if (!res.ok || !payload?.success) {
@@ -142,7 +144,7 @@ export default function InboxPage() {
     } finally {
       setRegisteredKeyLoading(false);
     }
-  }, [address]);
+  }, [isLoggedIn, identityValue]);
 
   useEffect(() => {
     let active = true;
@@ -184,7 +186,7 @@ export default function InboxPage() {
 
   useEffect(() => {
     seedKeyCacheRef.current = null;
-  }, [address]);
+  }, [identityValue]);
 
   const resolveRecipientPrivateKey = useCallback(
     async (
@@ -194,8 +196,8 @@ export default function InboxPage() {
       if (!encryption) {
         throw new Error('No encryption metadata for this transfer.');
       }
-      if (!address) {
-        throw new Error('Wallet address required to decrypt');
+      if (!identityValue) {
+        throw new Error('Login required to decrypt');
       }
 
       const keySource =
@@ -245,7 +247,7 @@ export default function InboxPage() {
         if (!cached) {
           let mnemonic: string | null = null;
           try {
-            const profile = loadProfile(address);
+            const profile = loadProfile(identityValue);
             const stored =
               typeof profile.seedMnemonic === 'string' ? profile.seedMnemonic.trim() : '';
             mnemonic = stored.length > 0 ? stored : null;
@@ -282,20 +284,13 @@ export default function InboxPage() {
         return { privateKey: cached.privateKey, source: 'seed' };
       }
 
-      if (!signMessageAsync) {
-        throw new Error('Wallet signer not available');
-      }
-      const privateKey = await getVaultPrivateKey(address, signMessageAsync);
+      const privateKey = await getVaultPrivateKey(
+        identityValue,
+        canUseWallet ? signMessageAsync : undefined
+      );
       return { privateKey, source: 'vault' };
     },
-    [
-      address,
-      passkeyLoading,
-      passkeyRecord,
-      registeredKeyLoading,
-      registeredKeyRecord,
-      signMessageAsync,
-    ]
+    [identityValue, canUseWallet, passkeyLoading, passkeyRecord, registeredKeyLoading, registeredKeyRecord, signMessageAsync]
   );
 
   const onDownload = useCallback(
@@ -452,12 +447,26 @@ export default function InboxPage() {
     [resolveRecipientPrivateKey]
   );
 
-  if (!isConnected || !address) {
+  if (!isLoggedIn) {
     return (
       <main className="col" style={{ gap: 16 }}>
         <div className="hero">
           <div className="headline">Inbox</div>
-          <div className="subhead">Connect your wallet to see incoming files.</div>
+          <div className="subhead">Log in to see incoming files.</div>
+          <div style={{ marginTop: 12 }}>
+            <LoginButton />
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (!identityValue && authMethod === 'mixed') {
+    return (
+      <main className="col" style={{ gap: 16 }}>
+        <div className="hero">
+          <div className="headline">Inbox</div>
+          <div className="subhead">Multiple logins active. Disconnect one to continue.</div>
         </div>
       </main>
     );
@@ -467,7 +476,7 @@ export default function InboxPage() {
     <main className="col" style={{ gap: 24 }}>
       <div className="hero">
         <div className="headline">Inbox</div>
-        <div className="subhead">Files sent to your wallet.</div>
+        <div className="subhead">Files sent to you.</div>
       </div>
       <section className="col" style={{ gap: 12 }}>
         {loading && <RoundedLoaderList count={1} rows={3} blocks={36} />}
@@ -553,7 +562,7 @@ export default function InboxPage() {
                     {expanded[item.id] && (
                       <div className="details mono" style={{ fontSize: 12 }}>
                         <div className="col" style={{ gap: 6 }}>
-                          <WalletIdentityCard label="From" address={item.initiator} />
+                          <WalletIdentityCard label="From" identity={item.initiator} />
                         </div>
                         <div style={{ marginTop: 10 }}>
                           tx:{' '}

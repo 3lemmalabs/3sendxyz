@@ -1,13 +1,13 @@
 'use client';
 
+import { LoginButton } from '@/components/LoginButton';
+import { useAuthStatus } from '@/lib/useAuthStatus';
 import Link from 'next/link';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAccount } from 'wagmi';
 
 export default function PricingCta() {
-  const { isConnected } = useAccount();
+  const { isLoggedIn, identityValue, authMethod } = useAuthStatus();
 
-  if (isConnected) {
+  if (isLoggedIn && identityValue) {
     return (
       <div
         className="card"
@@ -16,38 +16,54 @@ export default function PricingCta() {
         <div>
           <div style={{ fontWeight: 700 }}>Ready to send?</div>
           <div className="muted" style={{ fontSize: 12 }}>
-            Go to Outbox and start sending. Pricing updates automatically based on your file size.
+            Go to send page and start sending. Pricing updates automatically based on your file size.
           </div>
         </div>
         <div className="homeCtaActions">
           <Link href="/outbox" className="button" style={{ textDecoration: 'none' }}>
-            Go to Outbox
+            Send
           </Link>
         </div>
       </div>
     );
   }
 
-  return (
-    <ConnectButton.Custom>
-      {({ openConnectModal }) => (
-        <div
-          className="card"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}
-        >
-          <div>
-            <div style={{ fontWeight: 700 }}>Ready to send?</div>
-            <div className="muted" style={{ fontSize: 12 }}>
-              Connect your wallet to start sending. Pricing adjusts automatically based on your file size.
-            </div>
-          </div>
-          <div className="homeCtaActions">
-            <button type="button" className="button" onClick={openConnectModal}>
-              Connect Now
-            </button>
+  if (isLoggedIn && !identityValue && authMethod === 'mixed') {
+    return (
+      <div
+        className="card"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}
+      >
+        <div>
+          <div style={{ fontWeight: 700 }}>Multiple logins active</div>
+          <div className="muted" style={{ fontSize: 12 }}>
+            Sign out of one login method to continue.
           </div>
         </div>
-      )}
-    </ConnectButton.Custom>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="card"
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}
+    >
+      <div>
+        <div style={{ fontWeight: 700 }}>Ready to send?</div>
+        <div className="muted" style={{ fontSize: 12 }}>
+          Log in with email or connect a wallet to start sending.
+        </div>
+      </div>
+      <div className="homeCtaActions">
+        <LoginButton label="Login" />
+      </div>
+    </div>
   );
 }

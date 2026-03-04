@@ -49,5 +49,6 @@ jobs:
           platforms: linux/amd64
           build-args: |
             NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}
+            NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
             VERSION_HASH=${{ steps.version.outputs.hash }}
           tags: ${{ secrets.DOCKERHUB_IMAGE_TAGS }}

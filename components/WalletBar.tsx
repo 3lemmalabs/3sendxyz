@@ -1,13 +1,17 @@
 'use client';
 
+import { LoginButton } from '@/components/LoginButton';
 import { REQUIRED_CHAIN_ID, REQUIRED_CHAIN_NAME } from '@/lib/constants';
+import { useAuthStatus } from '@/lib/useAuthStatus';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
 
 export function WalletBar() {
-  const { address, chain } = useAccount();
+  const { canUseWallet, isLoggedIn } = useAuthStatus();
+  const { chain } = useAccount();
+  const walletActive = canUseWallet;
   const wrongNetwork = Boolean(chain?.id && chain.id !== REQUIRED_CHAIN_ID);
-  const statusCopy = address
+  const statusCopy = walletActive
     ? wrongNetwork
       ? `Wrong network${chain?.name ? `: ${chain.name}` : ''}. Switch to ${REQUIRED_CHAIN_NAME}.`
       : `Connected${chain ? ` on ${chain.name}` : ''}`
@@ -23,7 +27,15 @@ export function WalletBar() {
           {statusCopy}
         </div>
       </div>
-      <ConnectButton showBalance={false} />
+      {walletActive ? (
+        <ConnectButton showBalance={false} />
+      ) : isLoggedIn ? (
+        <span className="muted" style={{ fontSize: 12 }}>
+          Wallet disconnected
+        </span>
+      ) : (
+        <LoginButton />
+      )}
     </div>
   );
 }

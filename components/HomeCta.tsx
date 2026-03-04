@@ -1,19 +1,21 @@
 'use client';
 
 import { IdentityBadge } from '@/components/IdentityBadge';
+import { LoginButton } from '@/components/LoginButton';
 import { FREE_MICRO_SENDS_PER_MONTH } from '@/lib/constants';
 import { shortAddress } from '@/lib/format';
 import { fetchIdentityProfile, identityQueryKey } from '@/lib/identity';
+import { useAuthStatus } from '@/lib/useAuthStatus';
 import { useQuery } from '@tanstack/react-query';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 import { useAccount } from 'wagmi';
 
 export default function HomeCta() {
-  const { isConnected, address } = useAccount();
-  const normalizedAddress = address?.trim().toLowerCase() ?? '';
+  const { authMethod, canUseWallet, isLoggedIn, identityValue } = useAuthStatus();
+  const { address } = useAccount();
+  const normalizedAddress = canUseWallet ? address?.trim().toLowerCase() ?? '' : '';
   const { data: identityProfile } = useQuery({
     queryKey: identityQueryKey(normalizedAddress),
     queryFn: () => fetchIdentityProfile(normalizedAddress),
@@ -28,10 +30,11 @@ export default function HomeCta() {
     null
   );
   const [freeAllowanceError, setFreeAllowanceError] = useState<string | null>(null);
-  const sentLoading = isConnected && Boolean(address) && sentCount === null;
-  const inboxLoading = isConnected && Boolean(address) && inboxCount === null;
-  const freeAllowanceLoading =
-    isConnected && Boolean(address) && freeAllowance === null && !freeAllowanceError;
+  const walletActive = canUseWallet;
+  const hasIdentity = Boolean(identityValue);
+  const sentLoading = isLoggedIn && hasIdentity && sentCount === null;
+  const inboxLoading = isLoggedIn && hasIdentity && inboxCount === null;
+  const freeAllowanceLoading = isLoggedIn && hasIdentity && freeAllowance === null && !freeAllowanceError;
   const baseName = identityProfile?.name?.trim();
 
   const copyAddress = useCallback(async () => {
@@ -62,6 +65,20 @@ export default function HomeCta() {
     }
   }, [baseName]);
 
+  const copyIdentity = useCallback(async () => {
+    if (!identityValue) return;
+    try {
+      if (typeof navigator === 'undefined' || !navigator.clipboard) {
+        throw new Error('Clipboard unavailable');
+      }
+      await navigator.clipboard.writeText(identityValue);
+      toast.success('Identity copied.');
+    } catch (err) {
+      console.error('[home] copy identity failed', err);
+      toast.error('Unable to copy identity.');
+    }
+  }, [identityValue]);
+
   useEffect(() => {
     let aborted = false;
     const toSafeCount = (value: unknown): number | null => {
@@ -71,7 +88,7 @@ export default function HomeCta() {
     };
 
     async function fetchCounts() {
-      if (!isConnected || !address) {
+      if (!isLoggedIn || !identityValue) {
         setSentCount(null);
         setInboxCount(null);
         setFreeAllowance(null);
@@ -79,9 +96,9 @@ export default function HomeCta() {
         return;
       }
       try {
-        const qsSent = new URLSearchParams({ initiator: address });
-        const qsInbox = new URLSearchParams({ recipient: address });
-        const allowanceUrl = `/api/send/freeAllowance?address=${encodeURIComponent(address)}`;
+        const qsSent = new URLSearchParams({ initiator: identityValue });
+        const qsInbox = new URLSearchParams({ recipient: identityValue });
+        const allowanceUrl = `/api/send/freeAllowance?identity=${encodeURIComponent(identityValue)}`;
         const [resSent, resInbox, resFreeAllowance] = await Promise.all([
           fetch(`/api/sent?${qsSent.toString()}`),
           fetch(`/api/inbox?${qsInbox.toString()}`),
@@ -148,9 +165,9 @@ export default function HomeCta() {
       window.removeEventListener('ratio1:upload-completed', onCompleted);
       window.removeEventListener('focus', onFocus);
     };
-  }, [isConnected, address]);
+  }, [isLoggedIn, identityValue]);
 
-  if (isConnected) {
+  if (isLoggedIn && identityValue) {
     return (
       <div
         className="card"
@@ -173,7 +190,7 @@ export default function HomeCta() {
             }}
           >
             <span>Hello</span>
-            {address ? (
+            {walletActive && address ? (
               <button
                 type="button"
                 onClick={hasBaseName ? copyBasename : copyAddress}
@@ -184,19 +201,42 @@ export default function HomeCta() {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 8,
-                flexWrap: 'wrap',
-                background: 'transparent',
-                border: 'none',
-                padding: 0,
+                  flexWrap: 'wrap',
+                  background: 'transparent',
+                  border: 'none',
+                  padding: 0,
                   cursor: 'pointer',
                   fontSize: 'inherit',
                 }}
               >
                 <IdentityBadge address={address} size={4} basicStyle={true} />
               </button>
-            ) : null}
+            ) : (
+              <button
+                type="button"
+                onClick={copyIdentity}
+                aria-label="Copy identity"
+                title="Copy identity"
+                style={{
+                  color: 'var(--accent)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  flexWrap: 'wrap',
+                  background: 'transparent',
+                  border: 'none',
+                  padding: 0,
+                  cursor: 'pointer',
+                  fontSize: 'inherit',
+                }}
+              >
+                <span style={{ fontWeight: 600, lineHeight: 1 }}>
+                  {identityValue}
+                </span>
+              </button>
+            )}
           </div>
-          {hasBaseName && address ? (
+          {walletActive && hasBaseName && address ? (
             <div
               className="row"
               style={{ gap: 8, marginTop: 2, flexWrap: 'wrap', alignItems: 'center' }}
@@ -297,32 +337,48 @@ export default function HomeCta() {
     );
   }
 
-  return (
-    <ConnectButton.Custom>
-      {({ openConnectModal }) => (
-        <div
-          className="card"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            flexWrap: 'wrap',
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: 700 }}>Connect now to get started</div>
-            <div className="muted" style={{ fontSize: 12 }}>
-              Check your inbox and send files with full privacy.
-            </div>
-          </div>
-          <div className="homeCtaActions">
-            <button type="button" className="button" onClick={openConnectModal}>
-              Connect Wallet
-            </button>
+  if (authMethod === 'mixed') {
+    return (
+      <div
+        className="card"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}
+      >
+        <div>
+          <div style={{ fontWeight: 700 }}>Multiple logins active</div>
+          <div className="muted" style={{ fontSize: 12 }}>
+            Disconnect one login method to continue.
           </div>
         </div>
-      )}
-    </ConnectButton.Custom>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="card"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        flexWrap: 'wrap',
+      }}
+    >
+      <div>
+        <div style={{ fontWeight: 700 }}>Log in to get started</div>
+        <div className="muted" style={{ fontSize: 12 }}>
+          Use email and password or connect a wallet when you are ready.
+        </div>
+      </div>
+      <div className="homeCtaActions">
+        <LoginButton />
+      </div>
+    </div>
   );
 }
