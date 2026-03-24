@@ -59,7 +59,10 @@ export default function DownloadPage() {
     <main className="col" style={{ gap: 24 }}>
       <section className="hero">
         <div className="headline">Desktop App Downloads</div>
-        <div className="subhead">Install 3send.xyz on macOS or Windows.</div>
+        <div className="subhead">
+          Download the desktop app to send and receive files with a native 3send.xyz experience on
+          macOS or Windows.
+        </div>
       </section>
 
       <section
@@ -88,6 +91,16 @@ export default function DownloadPage() {
           logoHeight={30}
         />
       </section>
+
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <Image
+          src="/screenshots/desktop_app.png"
+          alt="3send.xyz desktop app preview"
+          width={1110}
+          height={727}
+          style={{ width: '100%', maxWidth: 900, height: 'auto', borderRadius: 12 }}
+        />
+      </div>
     </main>
   );
 }
