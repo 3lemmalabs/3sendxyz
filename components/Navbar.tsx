@@ -77,6 +77,7 @@ export function Navbar() {
         </div>
         <nav className="navlinks">
           <NavItem href="/" label="Home" />
+          <NavItem href="/download" label="Download" />
           <NavItem href="/pricing" label="Pricing" />
           {isLoggedIn && <NavItem href="/outbox" label="Outbox" />}
           {isLoggedIn && <NavItem href="/inbox" label="Inbox" />}
