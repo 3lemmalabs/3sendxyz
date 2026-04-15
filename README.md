@@ -83,7 +83,7 @@ The Ratio1 SDK also accepts the above variables via `window.__RATIO1_ENV__` when
 ```bibtex
 @software{butusina2025_3sendxyz,
   author       = {Butusina, Petrica and Defranceschi, Alessandro},
-  title        = {{3sendxyz}: End-to-end encrypted, decentralized file transfer},
+  title        = {{3sendxyz}: End-to-end encrypted, decentralized file transfer Web App},
   year         = {2025},
   url          = {https://github.com/3lemmalabs/3sendxyz},
   organization = {3lemma Labs},
